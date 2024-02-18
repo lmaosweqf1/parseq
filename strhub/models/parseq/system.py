@@ -1,18 +1,3 @@
-# Scene Text Recognition Model Hub
-# Copyright 2022 Darwin Bautista
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import math
 from functools import partial
 from itertools import permutations
@@ -104,8 +89,8 @@ class PARSeq(CrossEntropySystem):
         pos_queries = self.pos_queries[:, :num_steps].expand(bs, -1, -1)
 
         # Special case for the forward permutation. Faster than using `generate_attn_masks()`
-        tgt_mask = query_mask = torch.triu(torch.full((num_steps, num_steps), float('-inf'), device=self._device), 1)
-
+        tgt_mask = query_mask = torch.triu(
+            torch.full((num_steps, num_steps), True, dtype=torch.bool, device=self._device), 1)
         if self.decode_ar:
             tgt_in = torch.full((bs, num_steps), self.pad_id, dtype=torch.long, device=self._device)
             tgt_in[:, 0] = self.bos_id
@@ -211,19 +196,31 @@ class PARSeq(CrossEntropySystem):
 
     def generate_attn_masks(self, perm):
         """Generate attention masks given a sequence permutation (includes pos. for bos and eos tokens)
-        :param perm: the permutation sequence. i = 0 is always the BOS
-        :return: lookahead attention masks
-        """
+            :param perm: the permutation sequence. i = 0 is always the BOS
+            :return: lookahead attention masks
+            """
+        print("Generating attention masks")
         sz = perm.shape[0]
-        mask = torch.zeros((sz, sz), device=self._device)
+        mask = torch.zeros((sz, sz), dtype=torch.bool, device=self._device)  # Изменение здесь
         for i in range(sz):
             query_idx = perm[i]
             masked_keys = perm[i + 1:]
-            mask[query_idx, masked_keys] = float('-inf')
+            mask[query_idx, masked_keys] = True  # Изменение здесь
         content_mask = mask[:-1, :-1].clone()
-        mask[torch.eye(sz, dtype=torch.bool, device=self._device)] = float('-inf')  # mask "self"
+        mask[torch.eye(sz, dtype=torch.bool, device=self._device)] = True  # Изменение здесь
         query_mask = mask[1:, :-1]
         return content_mask, query_mask
+
+        # sz = perm.shape[0]
+        # mask = torch.zeros((sz, sz), device=self._device)
+        # for i in range(sz):
+        #     query_idx = perm[i]
+        #     masked_keys = perm[i + 1:]
+        #     mask[query_idx, masked_keys] = float('-inf')
+        # content_mask = mask[:-1, :-1].clone()
+        # mask[torch.eye(sz, dtype=torch.bool, device=self._device)] = float('-inf')  # mask "self"
+        # query_mask = mask[1:, :-1]
+        # return content_mask, query_mask
 
     def training_step(self, batch, batch_idx) -> STEP_OUTPUT:
         images, labels = batch
